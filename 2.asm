@@ -1,22 +1,29 @@
 .model small
 
 skBufDydis	EQU 10
-raBufDydis	EQU 2
+raBufDydis	EQU 10
 
 .stack 100h
 
 .data
-	duom		db "duom.txt",0
-	rez			db "rez.txt",0
+	helpMessage db 'Programa visus faile rastus skaitmenis pakeicia zodziais. Programos paleidimas: prog.exe duomenu_failas rezultatu_failas$'
+	numStrs 	db 'nulis$', 'vienas$', 'du$', 'trys$', 'keturi$', 'penki$', 'sesi$', 'septyni$', 'astuoni$', 'devyni$'
+	numOffset 	db 0, 6, 13, 16, 21, 28, 34, 39, 47, 55
+	inputFile  	db 255 dup(0)
+    outputFile 	db 255 dup(0)
 	skBuf		db skBufDydis dup (0)
 	raBuf		db raBufDydis dup (0)
 	dFail		dw ?			
 	rFail		dw ?
 	nuskaityta	dw 0
-	numStrs 	db 'nulis$', 'vienas$', 'du$', 'trys$', 'keturi$', 'penki$', 'sesi$', 'septyni$', 'astuoni$', 'devyni$'
-	numOffset 	db 0, 6, 13, 16, 21, 28, 34, 39, 47, 55
-
+	
 .code
+  help:
+	MOV	ah, 9
+	MOV	dx, offset helpMessage
+	INT	21h
+	
+	jmp pabaiga
   klaidaAtidarantSkaitymui:
 	JMP	pabaiga
   klaidaAtidarantRasymui:
@@ -25,31 +32,78 @@ raBufDydis	EQU 2
   pradzia:
 	MOV	ax, @data	
 	MOV	ds, ax
+	
+	MOV	ch, 0			
+	MOV	cl, [es:0080h]
+	CMP	cx, 0
+	JE help
+	
+	MOV	bx, 0081h
+	
+  search_for_help:
+	CMP	[es:bx], '?/'	
+	JE	help
+	INC	bx
+	LOOP search_for_help
+	
+	MOV	cl, [es:0080h]
+	CMP	cx, 4
+	JBE help
+	
+	mov bx, 82h
+	mov si, offset inputFile
+	mov di, offset outputFile
+	
+  parse_input_file:
+	mov ax, es:[bx]
+	inc bx
+	
+	cmp al, 20h
+	je parse_output_file
+	
+	mov byte ptr[si], al
+	inc si
+	jmp parse_input_file
+	
+  parse_output_file:
+	mov ax, es:[bx]
+	inc bx
+	cmp al, 13
+	je dirbam
+	
+	mov byte ptr[di], al
+	inc di
+	jmp parse_output_file
+	
+  dirbam:
+	MOV byte ptr [si], 0
+	MOV byte ptr [di], 0
 
 	MOV	ah, 3Dh
 	MOV	al, 00
-	MOV	dx, offset duom
+	MOV	dx, offset inputFile
 	INT	21h
 	JC	klaidaAtidarantSkaitymui
 	MOV	dFail, ax
 
 	MOV	ah, 3Ch
 	MOV	cx, 0
-	MOV	dx, offset rez
+	MOV	dx, offset outputFile
 	INT	21h
 	JC	klaidaAtidarantRasymui
 	MOV	rFail, ax
 
+	MOV di, offset raBuf
+	MOV dx, 0
   skaityk:
 	MOV	bx, dFail
 	CALL	SkaitykBuf
 	CMP	ax, 0
 	JE	uzdarytiRasymui
+	mov nuskaityta, ax
 	MOV cx, ax
-	MOV dx, 0
 	
 	MOV	si, offset skBuf
-	MOV di, offset raBuf
   dirbk:
 	cmp cx, 0
 	JE baigesiKaSkaitem
@@ -57,6 +111,7 @@ raBufDydis	EQU 2
 	DEC CX ; pazymim, kad viena nuskaitem
  
     MOV	bl, [si]
+    int 3
     CMP	bl, '0'
     JB	tesk
     CMP	bl, '9'
@@ -72,8 +127,7 @@ raBufDydis	EQU 2
 	add bx, offset numStrs
 	
   rasykZodi:
-	cmp dx, raBufDydis
-	JAE rasykBufs ; jeigu jau pilnas buferis, tada viska surasom ir idealiu atveju griztam cia
+	CALL RasykBuf
 	
 	mov ax, [bx]
 	
@@ -89,31 +143,27 @@ raBufDydis	EQU 2
 	
 	jmp rasykZodi
 	
-  rasykBufs:
-	PUSH BX
-	PUSH CX
-	
-	mov BX, rFail
-	mov CX, DX
-	CALL RasykBuf
-	POP CX
-	POP BX
-	
-	mov DX, 0
-	MOV di, offset raBuf
-	jmp rasykZodi
-	
   baigesiZodis:
 	inc si
 	jmp dirbk
 
   tesk:
+	CALL RasykBuf
+	mov [di], bl
+	INC dx
+	INC di
+	INC si
+	jmp dirbk
 
   baigesiKaSkaitem:
 	CMP	nuskaityta, skBufDydis
 	JE	skaityk
+	
 
   uzdarytiRasymui:
+	mov si, 128
+	CALL RasykBuf
+	
 	MOV	ah, 3Eh
 	MOV	bx, rFail
 	INT	21h
@@ -155,6 +205,18 @@ PROC SkaitykBuf
 SkaitykBuf ENDP
 
 PROC RasykBuf
+    cmp si, 128
+	JE Rasyk
+	
+	cmp dx, raBufDydis
+	JB nepilnasBuf
+	
+  Rasyk:
+	PUSH BX
+	PUSH CX
+	MOV BX, rFail
+	MOV CX, DX
+	
 	PUSH 	AX
 	PUSH	DX
 	
@@ -166,11 +228,28 @@ PROC RasykBuf
   RasykBufPabaiga:
 	POP 	AX
 	POP		DX
+	
+	POP		CX
+	POP		BX
+	MOV		DX, 0
+	MOV 	DI, offset raBuf
 	RET
 
   klaidaRasant:
-	MOV	ax, 0			;Pažymime registre ax, kad nebuvo įrašytas nė vienas simbolis
+	MOV	ax, 0			;Pažymime registre ax, kad nebuvo irašytas ne vienas simbolis
 	JMP	RasykBufPabaiga
+	
+  nepilnasBuf:
+	RET
 RasykBuf ENDP
 
+Proc PrintHelp
+	PUSH	AX
+	PUSH 	DX
+	
+	MOV		ah, 9
+	MOV		DX, offset helpMessage
+	INT		21h
+	RET
+PrintHelp ENDP
 END pradzia
