@@ -1,3 +1,7 @@
+; Augustas Budnikas Vilniaus Universitetas Programų Sistemos 1 kursas 1 grupė
+; Kompiuterių Architektūra 2 užduotis 7 variantas
+; Atsiskaitymo data: 2023-11-08
+
 .MODEL SMALL
 
 inputBufSize	EQU 10
@@ -85,7 +89,7 @@ outputBufSize	EQU 10
 	JMP 	parseOutputFileName
 	
   startProcessing:
-	MOV 	byte ptr [SI], 0 ; irasom nuli i baita, kuris yra SI, kad turetume pabaiga ivedimo
+	MOV 	byte ptr [SI], 0
 	MOV 	byte ptr [DI], 0
 
 	MOV		ah, 3Dh
@@ -145,9 +149,9 @@ outputBufSize	EQU 10
 	MOV 	AX, [BX]
 	MOV 	[DI], al
 	
-	INC 	BX ; pakeliam adrESa
-	INC 	DX ; pakeliam, kad irasem
-	INC 	DI ; pastumiam per viena vieta outputo buferi
+	INC 	BX 
+	INC 	DX 
+	INC 	DI 
 	
 	JMP 	writeWord
 	
